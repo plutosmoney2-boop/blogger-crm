@@ -1,0 +1,135 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blogger CRM</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1020;color:#f4f6ff;font-family:Arial,sans-serif}
+.app{max-width:900px;margin:auto;padding:22px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:24px}
+h1{font-size:25px;margin:0}
+.sub{color:#8993ad;font-size:13px;margin-top:6px}
+button{border:0;border-radius:11px;padding:12px 16px;background:#7967ff;color:white;font-weight:bold;cursor:pointer}
+button.secondary{background:#202944;color:#dce3ff}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.stat,.panel,.contact{background:#151e34;border:1px solid #26314c;border-radius:16px;padding:16px}
+.stat b{font-size:25px;display:block;margin-bottom:5px}
+.stat span{font-size:12px;color:#8993ad}
+.toolbar{display:flex;gap:10px;margin-bottom:15px}
+input,select,textarea{width:100%;background:#0e172a;border:1px solid #303c58;border-radius:10px;padding:12px;color:white;font-size:14px;outline:none}
+.toolbar input{flex:1}
+.contact{margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;align-items:center}
+.contact h3{font-size:15px;margin:0 0 6px}
+.meta{font-size:12px;color:#98a4bf}
+.tag{display:inline-block;padding:5px 8px;background:#29264c;color:#b9adff;border-radius:8px;font-size:11px;margin-top:8px}
+.actions{display:flex;gap:7px;flex-wrap:wrap}
+.actions button{padding:8px 10px;font-size:12px}
+.empty{text-align:center;color:#8993ad;padding:35px}
+.modal{display:none;position:fixed;inset:0;background:#000b;align-items:center;justify-content:center;padding:15px}
+.modal.show{display:flex}
+.dialog{background:#151e34;border:1px solid #303c58;border-radius:18px;padding:20px;width:100%;max-width:430px;max-height:90vh;overflow:auto}
+.dialog h2{margin-top:0}
+.field{margin:12px 0}
+.field label{display:block;font-size:12px;color:#aab5ce;margin-bottom:6px}
+.field textarea{min-height:70px}
+.full{width:100%;margin-top:8px}
+@media(max-width:600px){.app{padding:15px}.stats{gap:7px}.stat{padding:12px}.stat b{font-size:21px}.contact{align-items:flex-start;flex-direction:column}.actions{width:100%}.actions button{flex:1}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+ <div><h1>🚀 Blogger CRM</h1><div class="sub">Твоя система поиска и работы с блогерами</div></div>
+ <button onclick="openModal()">+ Добавить</button>
+</header>
+<div class="stats">
+ <div class="stat"><b id="total">0</b><span>Всего блогеров</span></div>
+ <div class="stat"><b id="active">0</b><span>В работе</span></div>
+ <div class="stat"><b id="meetings">0</b><span>Созвоны</span></div>
+</div>
+<div class="panel">
+ <div class="toolbar">
+  <input id="search" placeholder="Поиск по имени или нише..." oninput="render()">
+  <select id="filter" onchange="render()" style="max-width:150px">
+   <option value="">Все статусы</option>
+   <option>Не писал</option><option>Написал</option><option>Жду ответ</option>
+   <option>Получен ответ</option><option>Назначен созвон</option>
+   <option>Думает</option><option>Договорились</option><option>Отказ</option>
+  </select>
+ </div>
+ <div id="list"></div>
+</div>
+</div>
+<div class="modal" id="modal">
+ <div class="dialog">
+  <h2 id="modalTitle">Новый блогер</h2>
+  <input type="hidden" id="editId">
+  <div class="field"><label>Имя / название блога</label><input id="name" placeholder="Например, Анна"></div>
+  <div class="field"><label>Ссылка на Instagram / Telegram</label><input id="link" placeholder="@username или ссылка"></div>
+  <div class="field"><label>Ниша</label><input id="niche" placeholder="Например, психология"></div>
+  <div class="field"><label>Подписчики</label><input id="subs" type="number" placeholder="15000"></div>
+  <div class="field"><label>Просмотры сторис</label><input id="views" type="number" placeholder="1200"></div>
+  <div class="field"><label>Статус</label>
+   <select id="status">
+    <option>Не писал</option><option>Написал</option><option>Жду ответ</option>
+    <option>Получен ответ</option><option>Назначен созвон</option>
+    <option>Думает</option><option>Договорились</option><option>Отказ</option>
+   </select>
+  </div>
+  <div class="field"><label>Заметки</label><textarea id="notes" placeholder="Что важно помнить..."></textarea></div>
+  <button class="full" onclick="saveContact()">Сохранить блогера</button>
+  <button class="full secondary" onclick="closeModal()">Отмена</button>
+ </div>
+</div>
+<script>
+const tg=window.Telegram?.WebApp;
+tg?.ready();
+tg?.expand();
+let contacts=JSON.parse(localStorage.getItem('bloggerCRM')||'[]');
+function persist(){localStorage.setItem('bloggerCRM',JSON.stringify(contacts))}
+function openModal(id){
+ document.getElementById('modal').classList.add('show');
+ document.getElementById('modalTitle').textContent=id?'Редактировать блогера':'Новый блогер';
+ const c=contacts.find(x=>x.id===id);
+ document.getElementById('editId').value=c?.id||'';
+ ['name','link','niche','subs','views','status','notes'].forEach(k=>{
+  document.getElementById(k).value=c?.[k]??(k==='status'?'Не писал':'');
+ });
+}
+function closeModal(){document.getElementById('modal').classList.remove('show')}
+function saveContact(){
+ const name=document.getElementById('name').value.trim();
+ if(!name){alert('Укажи имя блогера');return}
+ const id=document.getElementById('editId').value;
+ const c={id:id||String(Date.now())};
+ ['name','link','niche','subs','views','status','notes'].forEach(k=>c[k]=document.getElementById(k).value.trim());
+ if(id)contacts=contacts.map(x=>x.id===id?c:x);else contacts.unshift(c);
+ persist();closeModal();render();
+}
+function removeContact(id){
+ if(confirm('Удалить этого блогера?')){contacts=contacts.filter(x=>x.id!==id);persist();render()}
+}
+function render(){
+ const q=document.getElementById('search').value.toLowerCase();
+ const f=document.getElementById('filter').value;
+ const shown=contacts.filter(c=>(!f||c.status===f)&&[c.name,c.niche,c.link].join(' ').toLowerCase().includes(q));
+ document.getElementById('total').textContent=contacts.length;
+ document.getElementById('active').textContent=contacts.filter(c=>!['Отказ','Договорились'].includes(c.status)).length;
+ document.getElementById('meetings').textContent=contacts.filter(c=>c.status==='Назначен созвон').length;
+ document.getElementById('list').innerHTML=shown.length?shown.map(c=>`
+ <div class="contact">
+  <div><h3>${esc(c.name)}</h3><div class="meta">${esc(c.niche||'Ниша не указана')} · ${c.subs||0} подписчиков · ${c.views||0} просмотров</div>
+  <div class="tag">${esc(c.status)}</div>${c.link?`<div class="meta" style="margin-top:7px">${esc(c.link)}</div>`:''}
+  ${c.notes?`<div class="meta" style="margin-top:7px">${esc(c.notes)}</div>`:''}</div>
+  <div class="actions"><button class="secondary" onclick="openModal('${c.id}')">Изменить</button><button class="secondary" onclick="removeContact('${c.id}')">Удалить</button></div>
+ </div>`).join(''):'<div class="empty">Пока блогеров нет. Нажми «+ Добавить» и создай первую карточку.</div>';
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+render();
+</script>
+</body>
+</html>
